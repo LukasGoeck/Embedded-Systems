@@ -1,0 +1,283 @@
+#include <Arduino.h>
+
+#include <Arduino_FreeRTOS.h>
+
+#include <LiquidCrystal.h>
+
+
+
+// Pin-Definitionen
+
+#define TRIGGER_PIN 9
+
+#define ECHO_PIN 7  
+
+#define LED_HC 10
+
+#define LED_PULSED 13
+
+#define LED_TEMPERATURE 12
+
+#define TEMP_SENSOR A0
+
+
+
+// LCD-Pins
+
+#define LCD_RS 2
+
+#define LCD_E 8
+
+#define LCD_D4 4
+
+#define LCD_D5 5
+
+#define LCD_D6 6
+
+#define LCD_D7 3
+
+
+
+// LCD-Objekt erstellen
+
+LiquidCrystal lcd(LCD_RS, LCD_E, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
+
+
+
+// Funktionsprototypen (Tasks)
+
+void TaskUltrasonicSensor(void *pvParameters);
+
+void TaskBlinkLED(void *pvParameters);
+
+void TaskReadTemperature(void *pvParameters);
+
+
+
+void setup() {
+
+    Serial.begin(115200);
+
+    lcd.begin(16, 2);
+
+lcd.setCursor(0, 0);
+
+lcd.print("LCD Test");
+
+
+
+    Serial.println("Setup gestartet...");
+
+
+
+    Serial.println("Pin-Modus setzen...");
+
+    pinMode(TRIGGER_PIN, OUTPUT);
+
+    pinMode(ECHO_PIN, INPUT);
+
+    pinMode(LED_HC, OUTPUT);
+
+    pinMode(LED_PULSED, OUTPUT);
+
+    pinMode(LED_TEMPERATURE, OUTPUT);
+
+
+
+    Serial.println("Pins initialisiert!");
+
+
+
+    Serial.println("LEDs aus...");
+
+    digitalWrite(TRIGGER_PIN, LOW);
+
+    digitalWrite(LED_HC, LOW);
+
+    digitalWrite(LED_PULSED, LOW);
+
+    digitalWrite(LED_TEMPERATURE, LOW);
+
+
+
+    Serial.println("Analogreferenz setzen...");
+
+    analogReference(INTERNAL);
+
+
+
+    Serial.println("Tasks erstellen...");
+
+    xTaskCreate(TaskUltrasonicSensor, "Ultrasonic", 100, NULL, 1, NULL);
+
+    xTaskCreate(TaskBlinkLED, "BlinkLED", 100, NULL, 1, NULL);
+
+    xTaskCreate(TaskReadTemperature, "Temperature", 100, NULL, 1, NULL);
+
+
+
+    Serial.println("Setup abgeschlossen!");
+
+}
+
+
+
+
+
+
+
+void loop() {
+
+    // Leer - FreeRTOS übernimmt die Steuerung
+
+}
+
+
+
+// Task 1: Entfernungsmessung mit Ultraschallsensor
+
+void TaskUltrasonicSensor(void *pvParameters) {
+
+    while (1) {
+
+        digitalWrite(TRIGGER_PIN, HIGH);
+
+        delayMicroseconds(10);
+
+        digitalWrite(TRIGGER_PIN, LOW);
+
+        delayMicroseconds(5);
+
+
+
+        long duration = pulseIn(ECHO_PIN, HIGH, 100000);
+
+        long distance = duration / 29 / 2;
+
+
+
+        if (distance > 0 && distance < 30) {  
+
+            digitalWrite(LED_HC, HIGH);
+
+        } else {
+
+            digitalWrite(LED_HC, LOW);
+
+        }
+
+
+
+        Serial.print("Entfernung: ");
+
+        Serial.print(distance);
+
+        Serial.println(" cm");
+
+
+
+        // LCD aktualisieren (erste Zeile)
+
+        lcd.setCursor(0, 0);
+
+        lcd.print("Entfernung: ");
+
+        lcd.print(distance);
+
+        lcd.print("cm  "); // Leerräume, um alte Werte zu überschreiben
+
+
+
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+
+    }
+
+}
+
+
+
+// Task 2: LED blinkt alle 7 Sekunden
+
+void TaskBlinkLED(void *pvParameters) {
+
+    while (1) {
+
+        for (int i = 0; i < 5; i++) {
+
+            digitalWrite(LED_PULSED, HIGH);
+
+            vTaskDelay(500 / portTICK_PERIOD_MS);
+
+            digitalWrite(LED_PULSED, LOW);
+
+            vTaskDelay(500 / portTICK_PERIOD_MS);
+
+        }
+
+        vTaskDelay(7000 / portTICK_PERIOD_MS);
+
+    }
+
+}
+
+
+
+// Task 3: Temperaturmessung alle 3 Sekunden
+
+void TaskReadTemperature(void *pvParameters) {
+
+    while (1) {
+
+        float sum_temp = 0;
+
+        for (int i = 0; i < 3; i++) {
+
+            sum_temp += (analogRead(TEMP_SENSOR) * 110.0) / 1024;
+
+            vTaskDelay(500 / portTICK_PERIOD_MS);
+
+        }
+
+
+
+        float average_temp = sum_temp / 3;
+
+
+
+        if (average_temp > 23) {
+
+            digitalWrite(LED_TEMPERATURE, HIGH);
+
+        } else {
+
+            digitalWrite(LED_TEMPERATURE, LOW);
+
+        }
+
+
+
+        Serial.print("Temperatur: ");
+
+        Serial.print(average_temp);
+
+        Serial.println(" °C");
+
+
+
+        // LCD aktualisieren (zweite Zeile)
+
+        lcd.setCursor(0, 1);
+
+        lcd.print("Temp: ");
+
+        lcd.print(average_temp);
+
+        lcd.print("C   "); // Leerräume, um alte Werte zu überschreiben
+
+
+
+        vTaskDelay(3000 / portTICK_PERIOD_MS);
+
+    }
+
+}
